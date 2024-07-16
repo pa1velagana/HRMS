@@ -2,38 +2,55 @@ package com.spyd.HRMS.service;
 
 import com.spyd.HRMS.modal.Hr;
 import com.spyd.HRMS.repo.HrRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority; // Import SimpleGrantedAuthority
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class CustomHrDetails implements UserDetailsService {
 
-    private HrRepository hrRepository;
+    private final HrRepository hrRepository;
 
-
-    public CustomHrDetails(HrRepository hrRepository) {
+    @Autowired
+    public CustomHrDetails(HrRepository hrRepository, PasswordEncoder passwordEncoder) {
         this.hrRepository = hrRepository;
     }
 
     @Override
-    public UserDetails loadUserByUsername(String firstname) throws UsernameNotFoundException {
+    public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
+        Optional<Hr> optionalHr = hrRepository.findByEmail(email);
 
-        Optional<Hr> hr = hrRepository.findByEmail(firstname);
+        Hr hr = optionalHr.orElseThrow(() ->
+                new UsernameNotFoundException("User not found with email: " + email));
 
-        if(!hr.isPresent()) {
-            throw new UsernameNotFoundException("user not found with email "+firstname);
-        }
-        Hr hr1=hr.get();
-        List<GrantedAuthority> authorities = new ArrayList<>();
-
-        return new org.springframework.security.core.userdetails.User(hr1.getEmail(),hr1.getPassword(),authorities);
+        return buildUserDetails(hr);
     }
 
+    private UserDetails buildUserDetails(Hr hr) {
+        return new org.springframework.security.core.userdetails.User(
+                hr.getEmail(),
+                hr.getPassword(),
+                mapAuthorities(hr.getRoles()) // Map roles from Hr entity
+        );
+    }
+
+    private Collection<? extends GrantedAuthority> mapAuthorities(Set<String> roles) {
+        if (roles == null) {
+            return Collections.emptyList();
+        }
+        return roles.stream()
+                .map(role -> new SimpleGrantedAuthority("ROLE_" + role)) // Create SimpleGrantedAuthority objects
+                .collect(Collectors.toList());
+    }
 }

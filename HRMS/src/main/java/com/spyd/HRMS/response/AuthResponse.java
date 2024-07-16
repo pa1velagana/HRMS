@@ -1,41 +1,52 @@
 package com.spyd.HRMS.response;
 
+import lombok.Getter;
+import lombok.Setter;
 
-public class AuthResponse {
+import java.io.Serial;
+import java.io.Serializable;
+import java.util.Objects;
+
+@Setter
+@Getter
+public class AuthResponse implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private String jwt;
+    private boolean authenticated;
+    private String message;
 
-    private boolean status;
+    public AuthResponse() {}
 
-    public AuthResponse() {
-        // TODO Auto-generated constructor stub
-    }
-
-    public AuthResponse(String jwt, boolean status) {
-        super();
+    public AuthResponse(String jwt, boolean authenticated, String message) {
         this.jwt = jwt;
-        this.status = status;
+        this.authenticated = authenticated;
+        this.message = message;
     }
 
-    public AuthResponse(Object o, boolean b, String s) {
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        AuthResponse that = (AuthResponse) o;
+        return authenticated == that.authenticated &&
+                Objects.equals(jwt, that.jwt) &&
+                Objects.equals(message, that.message);
     }
 
-    public String getJwt() {
-        return jwt;
+    @Override
+    public int hashCode() {
+        return Objects.hash(jwt, authenticated, message);
     }
 
-    public void setJwt(String jwt) {
-        this.jwt = jwt;
+    @Override
+    public String toString() {
+        return "AuthResponse{" +
+                "jwt='" + jwt + '\'' +
+                ", authenticated=" + authenticated +
+                ", message='" + message + '\'' +
+                '}';
     }
-
-    public boolean getStatus() {
-        return status;
-    }
-
-    public void setStatus(boolean status) {
-        this.status = status;
-    }
-
-
-
 }

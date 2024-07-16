@@ -6,6 +6,7 @@ import com.spyd.HRMS.modal.Hr;
 import com.spyd.HRMS.response.AuthResponse;
 import com.spyd.HRMS.service.CustomHrDetails;
 import com.spyd.HRMS.service.HrService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,70 +16,63 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Collections;
+import java.util.HashSet;
 
 @RestController
 @RequestMapping("/hrms")
+@Validated
 public class HrController {
 
-    @Autowired
-    HrService hrService;
+    private final HrService hrService;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final CustomHrDetails customHrDetails;
 
     @Autowired
-    PasswordEncoder passwordEncoder;
-
-    @Autowired
-    JwtTokenProvider jwtTokenProvider;
-
-    @Autowired
-    CustomHrDetails customHrDetails;
+    public HrController(HrService hrService, PasswordEncoder passwordEncoder,
+                        JwtTokenProvider jwtTokenProvider, CustomHrDetails customHrDetails) {
+        this.hrService = hrService;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtTokenProvider = jwtTokenProvider;
+        this.customHrDetails = customHrDetails;
+    }
 
     @PostMapping("/save")
-    public ResponseEntity<String> creatingUser(@RequestBody Hr user){
-        return new ResponseEntity<>(hrService.savingUserCredentials(user), HttpStatus.CREATED);
+    public ResponseEntity<String> createUser(@Valid @RequestBody Hr user) {
+        // Ensure the user has at least the ROLE_USER
+        if (user.getRoles() == null || user.getRoles().isEmpty()) {
+            user.setRoles(new HashSet<>(Collections.singletonList("ROLE_USER")));
+        }
+        String response = hrService.savingUserCredentials(user);
+        if ("Already registered with this email".equals(response)) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        }
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
-//
-//    @PostMapping("/login")
-//    public ResponseEntity<String> loginCredentials(@RequestBody LoginRequest loginRequest){
-//        return new ResponseEntity<>(hrService.loginCredentials(loginRequest),HttpStatus.OK);
-//    }
-
 
     @PostMapping("/signin")
-    public ResponseEntity<AuthResponse> signin(@RequestBody LoginRequest loginRequest) {
-        String username = loginRequest.getEmail();
-        String password = loginRequest.getPassword();
-
-        System.out.println(username + " ----- " + password);
-
-        Authentication authentication = authenticate(username, password);
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-
-        String token = jwtTokenProvider.generateToken(authentication);
-        AuthResponse authResponse = new AuthResponse();
-
-        authResponse.setStatus(true);
-        authResponse.setJwt(token);
-
-
-        return new ResponseEntity<AuthResponse>(authResponse, HttpStatus.OK);
+    public ResponseEntity<AuthResponse> signin(@Valid @RequestBody LoginRequest loginRequest) {
+        try {
+            Authentication authentication = authenticate(loginRequest.getEmail(), loginRequest.getPassword());
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            String token = jwtTokenProvider.generateToken(authentication);
+            AuthResponse authResponse = new AuthResponse(token, true, "Login successful");
+            return ResponseEntity.ok(authResponse);
+        } catch (BadCredentialsException e) {
+            AuthResponse authResponse = new AuthResponse();
+            authResponse.setAuthenticated(false);
+            authResponse.setMessage("Invalid username or password");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(authResponse);
+        }
     }
 
-    private Authentication authenticate(String username, String password) {
-        UserDetails userDetails = customHrDetails.loadUserByUsername(username);
-
-        System.out.println("sign in userDetails - " + userDetails);
-
-        if (userDetails == null) {
-            System.out.println("sign in userDetails - null " + userDetails);
-            throw new BadCredentialsException("Invalid username or password");
-        }
-        if (!passwordEncoder.matches(password, userDetails.getPassword())) {
-            System.out.println("sign in userDetails - password not match " + userDetails);
+    private Authentication authenticate(String email, String password) {
+        UserDetails userDetails = customHrDetails.loadUserByUsername(email);
+        if (userDetails == null || !passwordEncoder.matches(password, userDetails.getPassword())) {
             throw new BadCredentialsException("Invalid username or password");
         }
         return new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
